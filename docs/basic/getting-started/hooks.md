@@ -10,17 +10,17 @@ Hooks are [supported in `@types/react` from v16.8 up](https://github.com/Definit
 Type inference works very well for simple values:
 
 ```tsx
-const [val, toggle] = React.useState(false);
-// `val` is inferred to be a boolean
-// `toggle` only takes booleans
+const [state, setState] = useState(false);
+// `state` is inferred to be a boolean
+// `setState` only takes booleans
 ```
 
-See also the [Using Inferred Types](https://react-typescript-cheatsheet.netlify.app/docs/basic/troubleshooting/types/#using-inferred-types) section if you need to use a complex type that you've relied on inference for.
+If you need to use a complex type that you've relied on inference for, you can use `typeof` to capture the inferred type.
 
 However, many hooks are initialized with null-ish default values, and you may wonder how to provide types. Explicitly declare the type, and use a union type:
 
 ```tsx
-const [user, setUser] = React.useState<IUser | null>(null);
+const [user, setUser] = useState<User | null>(null);
 
 // later...
 setUser(newUser);
@@ -29,26 +29,74 @@ setUser(newUser);
 You can also use type assertions if a state is initialized soon after setup and always has a value after:
 
 ```tsx
-const [user, setUser] = React.useState<IUser>({} as IUser);
+const [user, setUser] = useState<User>({} as User);
 
 // later...
 setUser(newUser);
 ```
 
-This temporarily "lies" to the TypeScript compiler that `{}` is of type `IUser`. You should follow up by setting the `user` state — if you don't, the rest of your code may rely on the fact that `user` is of type `IUser` and that may lead to runtime errors.
+This temporarily "lies" to the TypeScript compiler that `{}` is of type `User`. You should follow up by setting the `user` state — if you don't, the rest of your code may rely on the fact that `user` is of type `User` and that may lead to runtime errors.
+
+## useCallback
+
+You can type the `useCallback` just like any other function.
+
+```ts
+const memoizedCallback = useCallback(
+  (param1: string, param2: number) => {
+    console.log(param1, param2)
+    return { ok: true }
+  },
+  [...],
+);
+/**
+ * VSCode will show the following type:
+ * const memoizedCallback:
+ *  (param1: string, param2: number) => { ok: boolean }
+ */
+```
+
+Note that for React < 18, the function signature of `useCallback` typed arguments as `any[]` by default:
+
+```ts
+function useCallback<T extends (...args: any[]) => any>(
+  callback: T,
+  deps: DependencyList,
+): T;
+```
+
+In React >= 18, the function signature of `useCallback` changed to the following:
+
+```ts
+function useCallback<T extends Function>(callback: T, deps: DependencyList): T;
+```
+
+Therefore, the following code will yield "`Parameter 'e' implicitly has an 'any' type.`" error in React >= 18, but not &lt;17.
+
+```ts
+// @ts-expect-error Parameter 'e' implicitly has 'any' type.
+useCallback((e) => {}, []);
+// Explicit 'any' type.
+useCallback((e: any) => {}, []);
+```
 
 ## useReducer
 
 You can use [Discriminated Unions](https://www.typescriptlang.org/docs/handbook/typescript-in-5-minutes-func.html#discriminated-unions) for reducer actions. Don't forget to define the return type of reducer, otherwise TypeScript will infer it.
 
 ```tsx
+import { useReducer } from "react";
+
 const initialState = { count: 0 };
 
 type ACTIONTYPE =
   | { type: "increment"; payload: number }
   | { type: "decrement"; payload: string };
 
-function reducer(state: typeof initialState, action: ACTIONTYPE) {
+function reducer(
+  state: typeof initialState,
+  action: ACTIONTYPE,
+): typeof initialState {
   switch (action.type) {
     case "increment":
       return { count: state.count + action.payload };
@@ -60,7 +108,7 @@ function reducer(state: typeof initialState, action: ACTIONTYPE) {
 }
 
 function Counter() {
-  const [state, dispatch] = React.useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState);
   return (
     <>
       Count: {state.count}
@@ -93,6 +141,21 @@ export function reducer: Reducer<AppState, Action>() {}
 
 </details>
 
+<details>
+
+<summary><b>Providing explicit types for <code>useReducer</code></b></summary>
+
+In most cases, type inference for useReducer should work reliably. When inference fails, the state and action types can be explicitly provided using the following syntax, where the action type is wrapped in a single-element tuple.
+
+```tsx
+const [state, dispatch] = useReducer<typeof initialState, [ACTIONTYPE]>(
+  reducer,
+  initialState,
+);
+```
+
+</details>
+
 ## useEffect / useLayoutEffect
 
 Both of `useEffect` and `useLayoutEffect` are used for performing <b>side effects</b> and return an optional cleanup function which means if they don't deal with returning values, no types are necessary. When using `useEffect`, take care not to return anything other than a function or `undefined`, otherwise both TypeScript and React will yell at you. This can be subtle when using arrow functions:
@@ -106,7 +169,7 @@ function DelayedEffect(props: { timerMs: number }) {
       setTimeout(() => {
         /* do stuff */
       }, timerMs),
-    [timerMs]
+    [timerMs],
   );
   // bad example! setTimeout implicitly returns a number
   // because the arrow function body isn't wrapped in curly braces
@@ -135,11 +198,11 @@ function DelayedEffect(props: { timerMs: number }) {
 
 ## useRef
 
-In TypeScript, `useRef` returns a reference that is either [read-only](https://github.com/DefinitelyTyped/DefinitelyTyped/blob/abd69803c1b710db58d511f4544ec1b70bc9077c/types/react/v16/index.d.ts#L1025-L1039) or [mutable](https://github.com/DefinitelyTyped/DefinitelyTyped/blob/abd69803c1b710db58d511f4544ec1b70bc9077c/types/react/v16/index.d.ts#L1012-L1023), depends on whether your type argument fully covers the initial value or not. Choose one that suits your use case.
+`useRef` always returns a `RefObject<T>` in current `@types/react`. An initial value is required, and the returned `.current` is typed based on it. (`MutableRefObject` is deprecated and only kept for backwards compatibility.)
 
 ### Option 1: DOM element ref
 
-**[To access a DOM element](https://reactjs.org/docs/refs-and-the-dom.html):** provide only the element type as argument, and use `null` as initial value. In this case, the returned reference will have a read-only `.current` that is managed by React. TypeScript expects you to give this ref to an element's `ref` prop:
+**To access a DOM element:** provide the element type as a generic and pass `null` as the initial value. React manages `.current` for you, and TypeScript expects you to pass this ref to an element's `ref` prop:
 
 ```tsx
 function Foo() {
@@ -150,7 +213,7 @@ function Foo() {
 
   useEffect(() => {
     // Note that ref.current may be null. This is expected, because you may
-    // conditionally render the ref-ed element, or you may forgot to assign it
+    // conditionally render the ref-ed element, or you may forget to assign it
     if (!divRef.current) throw Error("divRef is not assigned");
 
     // Now divRef.current is sure to be HTMLDivElement
@@ -183,21 +246,30 @@ Refs demand specificity - it is not enough to just specify any old `HTMLElement`
 
 ### Option 2: Mutable value ref
 
-**[To have a mutable value](https://reactjs.org/docs/hooks-faq.html#is-there-something-like-instance-variables):** provide the type you want, and make sure the initial value fully belongs to that type:
+**To hold a mutable value across renders without re-rendering on change:** pass the initial value you want — React doesn't manage `.current` for you here, you write to it manually.
 
 ```tsx
 function Foo() {
-  // Technical-wise, this returns MutableRefObject<number | null>
   const intervalRef = useRef<number | null>(null);
 
-  // You manage the ref yourself (that's why it's called MutableRefObject!)
   useEffect(() => {
-    intervalRef.current = setInterval(...);
-    return () => clearInterval(intervalRef.current);
+    intervalRef.current = window.setInterval(() => {
+      /* ... */
+    }, 1000);
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current);
+    };
   }, []);
 
-  // The ref is not passed to any element's "ref" prop
-  return <button onClick={/* clearInterval the ref */}>Cancel timer</button>;
+  return (
+    <button
+      onClick={() => {
+        /* clearInterval the ref */
+      }}
+    >
+      Cancel timer
+    </button>
+  );
 }
 ```
 
@@ -208,29 +280,62 @@ function Foo() {
 
 ## useImperativeHandle
 
-_We don't have much here, but this is from [a discussion in our issues](https://github.com/typescript-cheatsheets/react/issues/106). Please contribute if you have anything to add!_
+In React 19, `ref` is a regular prop on function components, so `useImperativeHandle` is called with the `ref` prop directly — no `forwardRef` needed.
 
 ```tsx
-type ListProps<ItemType> = {
-  items: ItemType[];
-  innerRef?: React.Ref<{ scrollToItem(item: ItemType): void }>;
+// Countdown.tsx
+import { useImperativeHandle, Ref } from "react";
+
+export type CountdownHandle = {
+  start: () => void;
 };
 
-function List<ItemType>(props: ListProps<ItemType>) {
-  useImperativeHandle(props.innerRef, () => ({
-    scrollToItem() {},
+type CountdownProps = {
+  ref?: Ref<CountdownHandle>;
+};
+
+const Countdown = ({ ref }: CountdownProps) => {
+  useImperativeHandle(ref, () => ({
+    // start() has type inference here
+    start() {
+      alert("Start");
+    },
   }));
-  return null;
+
+  return <div>Countdown</div>;
+};
+```
+
+```tsx
+// The component using the Countdown component
+import { useEffect, useRef } from "react";
+import Countdown, { CountdownHandle } from "./Countdown.tsx";
+
+function App() {
+  const countdownEl = useRef<CountdownHandle>(null);
+
+  useEffect(() => {
+    if (countdownEl.current) {
+      // start() has type inference here as well
+      countdownEl.current.start();
+    }
+  }, []);
+
+  return <Countdown ref={countdownEl} />;
 }
 ```
+
+> If you still maintain code that targets React < 19, see the [forwardRef section](./forward-create-ref.md) for the legacy approach using `forwardRef<CountdownHandle, CountdownProps>`.
 
 ## Custom Hooks
 
 If you are returning an array in your Custom Hook, you will want to avoid type inference as TypeScript will infer a union type (when you actually want different types in each position of the array). Instead, use [TS 3.4 const assertions](https://devblogs.microsoft.com/typescript/announcing-typescript-3-4/#const-assertions):
 
 ```tsx
+import { useState } from "react";
+
 export function useLoading() {
-  const [isLoading, setState] = React.useState(false);
+  const [isLoading, setState] = useState(false);
   const load = (aPromise: Promise<any>) => {
     setState(true);
     return aPromise.finally(() => setState(false));
@@ -249,15 +354,17 @@ This way, when you destructure you actually get the right types based on destruc
 If you are [having trouble with const assertions](https://github.com/babel/babel/issues/9800), you can also assert or define the function return types:
 
 ```tsx
+import { useState } from "react";
+
 export function useLoading() {
-  const [isLoading, setState] = React.useState(false);
+  const [isLoading, setState] = useState(false);
   const load = (aPromise: Promise<any>) => {
     setState(true);
     return aPromise.finally(() => setState(false));
   };
   return [isLoading, load] as [
     boolean,
-    (aPromise: Promise<any>) => Promise<any>
+    (aPromise: Promise<any>) => Promise<any>,
   ];
 }
 ```
@@ -290,6 +397,7 @@ Note that the React team recommends that custom hooks that return more than two 
 
 - https://medium.com/@jrwebdev/react-hooks-in-typescript-88fce7001d0d
 - https://fettblog.eu/typescript-react/hooks/#useref
+- https://github.com/gibbok/typescript-book
 
 If you are writing a React Hooks library, don't forget that you should also expose your types for users to use.
 
@@ -298,5 +406,3 @@ If you are writing a React Hooks library, don't forget that you should also expo
 - https://github.com/mweststrate/use-st8
 - https://github.com/palmerhq/the-platform
 - https://github.com/sw-yx/hooks
-
-[Something to add? File an issue](https://github.com/typescript-cheatsheets/react-typescript-cheatsheet/issues/new).

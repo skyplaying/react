@@ -45,23 +45,25 @@ class App extends React.Component<Props, State> {
 Instead of typing the arguments and return values with `React.FormEvent<>` and `void`, you may alternatively apply types to the event handler itself (_contributed by @TomasHubelbauer_):
 
 ```tsx
-  // typing on LEFT hand side of =
-  onChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    this.setState({text: e.currentTarget.value})
-  }
+// typing on LEFT hand side of =
+onChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
+  this.setState({ text: e.currentTarget.value });
+};
 ```
 
 <details>
 
 <summary><b>Why two ways to do the same thing?</b></summary>
 
-The first method uses an inferred method signature `(e: React.FormEvent<HTMLInputElement>): void` and the second method enforces a type of the delegate provided by `@types/react`. So `React.ChangeEventHandler<>` is simply a "blessed" typing by `@types/react`, whereas you can think of the inferred method as more... _artisanally hand-rolled_. Either way it's a good pattern to know. [See our Github PR for more](https://github.com/typescript-cheatsheets/react-typescript-cheatsheet/pull/24).
+The first method uses an inferred method signature `(e: React.FormEvent<HTMLInputElement>): void` and the second method enforces a type of the delegate provided by `@types/react`. So `React.ChangeEventHandler<>` is simply a "blessed" typing by `@types/react`, whereas you can think of the inferred method as more... _artisanally hand-rolled_. Either way it's a good pattern to know. [See our Github PR for more](https://github.com/typescript-cheatsheets/react/pull/24).
 
 </details>
 
+> Starting with React v19.2.10 `FormEvent` and `FormEventHandler` are deprecated and should be replaced with `SubmitEvent` and `SubmitEventHandler`. The older event types will still work but trigger a deprecation message.
+
 **Typing onSubmit, with Uncontrolled components in a Form**
 
-If you don't quite care about the type of the event, you can just use React.SyntheticEvent. If your target form has custom named inputs that you'd like to access, you can use a type assertion:
+If you don't quite care about the type of the event, you can just use `React.SyntheticEvent`. If your target form has custom named inputs that you'd like to access, you can use a type assertion:
 
 ```tsx
 <form
@@ -112,6 +114,7 @@ Of course, if you're making any sort of significant form, [you should use Formik
 | FormEvent        | Event that occurs whenever a form or form element gets/loses focus, a form element value is changed or the form is submitted.                                                                                                                                          |
 | InvalidEvent     | Fired when validity restrictions of an input fails (e.g `<input type="number" max="10">` and someone would insert number 20).                                                                                                                                          |
 | KeyboardEvent    | User interaction with the keyboard. Each event describes a single key interaction.                                                                                                                                                                                     |
+| InputEvent       | Event that occurs before the value of `<input>`, `<select>` and `<textarea>` changes.                                                                                                                                                                                  |
 | MouseEvent       | Events that occur due to the user interacting with a pointing device (e.g. mouse)                                                                                                                                                                                      |
 | PointerEvent     | Events that occur due to user interaction with a variety pointing of devices such as mouse, pen/stylus, a touchscreen and which also supports multi-touch. Unless you develop for older browsers (IE10 or Safari 12), pointer events are recommended. Extends UIEvent. |
 | TouchEvent       | Events that occur due to the user interacting with a touch device. Extends UIEvent.                                                                                                                                                                                    |
@@ -119,16 +122,3 @@ Of course, if you're making any sort of significant form, [you should use Formik
 | UIEvent          | Base Event for Mouse, Touch and Pointer events.                                                                                                                                                                                                                        |
 | WheelEvent       | Scrolling on a mouse wheel or similar input device. (Note: `wheel` event should not be confused with the `scroll` event)                                                                                                                                               |
 | SyntheticEvent   | The base event for all above events. Should be used when unsure about event type                                                                                                                                                                                       |
-
-<details>
-<summary><b>What about <code>InputEvent</code>?</b></summary>
-
-You've probably noticed that there is no `InputEvent`. This is because it is not supported by Typescript as the event itself has no fully browser support and may behave differently in different browsers. You can use `KeyboardEvent` instead.
-
-Sources:
-
-- https://github.com/microsoft/TypeScript/issues/29441
-- https://developer.mozilla.org/en-US/docs/Web/API/InputEvent
-- https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/input_event
-
-</details>
